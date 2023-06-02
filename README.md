@@ -23,7 +23,11 @@ Step 3 : Create configuration directories for Prometheus
 Prometheus primary configuration files directory is /etc/prometheus/. It will have some sub-directories.
 ```
 mkdir /etc/prometheus/rules /etc/prometheus/rules.d \
+<<<<<<< HEAD
+ /etc/prometheus/files_sd
+=======
  /etc/prometheus/rules files_sd
+>>>>>>> d68ed9c (alpha: prometheus server installation doc)
  ```
 
 Step 4 : Download Prometheus on CentOS 8 / RHEL 8
@@ -133,3 +137,42 @@ sudo firewall-cmd --add-port=9090/tcp --permanent
 sudo firewall-cmd --reload
 ```
 Open Prometheus Server IP/Hostname and port 9090
+
+## Enable Basic Server Authentication
+- Create /etc/prometheus/web.yaml file
+```
+basic_auth_users:
+        <username>: '<bcrypt_encrypted_password>'
+```
+where <bcrypt_scrypeted_password> is the pasword encrypted with bcrypt tool
+
+- Edit /etc/systemd/system/prometheus.yaml and add "--web.config.file=/etc/prometheus/web.yml"
+```
+[Unit]
+Description=Prometheus
+Documentation=https://prometheus.io/docs/introduction/overview/
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=simple
+User=prometheus
+Group=prometheus
+ExecReload=/bin/kill -HUP $MAINPID
+ExecStart=/usr/local/bin/prometheus \
+  --config.file=/etc/prometheus/prometheus.yml \
+  --web.config.file=/etc/prometheus/web.yml \
+  --storage.tsdb.path=/var/lib/prometheus \
+  --web.console.templates=/etc/prometheus/consoles \
+  --web.console.libraries=/etc/prometheus/console_libraries \
+  --web.listen-address=0.0.0.0:9090 \
+  --web.external-url=
+
+SyslogIdentifier=prometheus
+Restart=always
+
+[Install]
+WantedBy=multi-user.target
+```
+
+- Restart prometheus service
