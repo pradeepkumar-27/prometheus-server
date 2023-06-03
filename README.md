@@ -176,3 +176,101 @@ WantedBy=multi-user.target
 ```
 
 - Restart prometheus service
+
+---
+
+## Promtheus Linux Node Exporter
+
+Set up Prometheus Node Exporter on Linux
+
+- Download Node Exporter: Visit the official Prometheus GitHub repository (https://github.com/prometheus/node_exporter/releases) and download the latest version of Node Exporter for Linux. You can choose the appropriate binary based on your system architecture (e.g., 64-bit or ARM).
+```
+curl -LO https://github.com/prometheus/node_exporter/releases/download/v1.6.0/node_exporter-1.6.0.linux-amd64.tar.gz
+```
+
+- Extract the Archive
+```
+tar -xvzf node_exporter-1.6.0.linux-amd64.tar.gz
+```
+This will create a new directory with the extracted files.
+
+- Move the Files: Move the extracted files to the desired installation location. For example, you can move them to /usr/local/bin/node_exporter:
+```
+sudo mv node_exporter-1.6.0.linux-amd64/node_exporter /usr/local/bin/
+```
+
+- Create a Systemd Service: Create a systemd service unit file to manage the Node Exporter service. Use a text editor to create a new file:
+
+Create a service /etc/systemd/system/prometheus-node-exporter.service
+Add the following content to the file:
+```
+[Unit]
+Description=Prometheus Node Exporter
+After=network.target
+
+[Service]
+Type=simple
+User=prometheus
+Group=prometheus
+ExecReload=/bin/kill -HUP $MAINPID
+ExecStart=/bin/bash -c '/usr/local/bin/node_exporter'
+
+[Install]
+WantedBy=multi-user.target
+```
+Save the file and exit the text editor.
+
+- Reload Systemd and Start Node Exporter: After creating the service unit file, reload the systemd configuration and start the Node Exporter service:
+```
+sudo systemctl daemon-reload
+sudo systemctl start prometheus-node-exporter
+```
+- Enable Autostart on Boot: To ensure that Node Exporter starts automatically on system boot, enable the service:
+```
+sudo systemctl enable prometheus-node-exporter
+```
+- Allow firewall  for port 9100
+```
+sudo firewall-cmd --add-port=9090/tcp --permanent
+
+sudo firewall-cmd --reload
+```
+
+- Verify the Installation: Check if the Node Exporter service is running and accessible. You can access the metrics exposed by Node Exporter by visiting http://localhost:9100/metrics in a web browser or using tools like curl:
+```
+curl http://localhost:9100/metrics
+```
+If the service is running correctly, you should see a list of metrics in the response.
+
+- Configure promtheus job for node exeporter in prometheus config file /etc/prometheus/prometheus.yml
+```
+# Global config
+global: 
+  scrape_interval:     15s # Set the scrape interval to every 15 seconds. Default is every 1 minute.  
+  evaluation_interval: 15s # Evaluate rules every 15 seconds. The default is every 1 minute.  
+  scrape_timeout: 15s  # scrape_timeout is set to the global default (10s).
+
+# A scrape configuration containing exactly one endpoint to scrape:# Here it's Prometheus itself.
+scrape_configs:
+  # The job name is added as a label `job=<job_name>` to any timeseries scraped from this config.
+  - job_name: 'prometheus'
+
+    # metrics_path defaults to '/metrics'
+    # scheme defaults to 'http'.
+
+    static_configs:
+    - targets: ['localhost:9090']
+    basic_auth:
+      username: prometheus
+      password: prometheus
+      
+  - job_name: 'prometheus.devops.org-node-exporter'
+
+    # metrics_path defaults to '/metrics'
+    # scheme defaults to 'http'.
+
+    static_configs:
+    - targets: ['localhost:9100']
+```
+
+That's it! You have successfully set up Prometheus Node Exporter on your Linux system. The Node Exporter will now collect various system metrics that can be scraped by Prometheus for monitoring and analysis.
