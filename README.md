@@ -274,3 +274,82 @@ scrape_configs:
 ```
 
 That's it! You have successfully set up Prometheus Node Exporter on your Linux system. The Node Exporter will now collect various system metrics that can be scraped by Prometheus for monitoring and analysis.
+
+
+## Ngninx Proxy with TLS Encryption for Prometheus
+
+Refer [nginx-server](https://github.com/pradeepkumar-27/nginx-server) doc for Nginx server installation.
+
+- Generate TLS/SSL certificate with Openssl for the server
+```
+openssl req -new -newkey rsa:2048 -days 365 -nodes -x509 \
+    -subj "/C=IN/ST=Tami Nadu/L=Ooty \
+    /O=DevOps Org/CN=prometheus.devops.org" \
+    -keyout /etc/nginx/cert.key -out /etc/nginx/cert.crt
+```
+
+- Create prometheus.conf in /etc/nginx/conf.d directory
+```
+server {
+    listen 80;
+    listen [::]:80;
+    server_name  prometheus.devops.org;
+
+    location / {
+        return 301 https://$host$request_uri;
+    }
+}
+
+server {
+    listen 443 ssl;
+    server_name prometheus.devops.org;
+
+    ssl_certificate /etc/nginx/cert.crt;
+    ssl_certificate_key /etc/nginx/cert.key;
+
+    location / {
+        proxy_pass           http://127.0.0.1:9090;
+    }
+}
+
+```
+
+- Configure /etc/nginx/nginx.conf
+```
+user nginx;
+worker_processes auto;
+error_log /var/log/nginx/error.log;
+pid /run/nginx.pid;
+
+# Load dynamic modules. See /usr/share/doc/nginx/README.dynamic.
+include /usr/share/nginx/modules/*.conf;
+
+events {
+    worker_connections 1024;
+}
+
+http {
+    log_format  main  '$remote_addr - $remote_user [$time_local] "$request" '
+                      '$status $body_bytes_sent "$http_referer" '
+                      '"$http_user_agent" "$http_x_forwarded_for"';
+
+    access_log  /var/log/nginx/access.log  main;
+
+    sendfile            on;
+    tcp_nopush          on;
+    tcp_nodelay         on;
+    keepalive_timeout   65;
+    types_hash_max_size 2048;
+
+    include             /etc/nginx/mime.types;
+    default_type        application/octet-stream;
+
+    include /etc/nginx/conf.d/*.conf;
+}
+
+```
+
+- Restart nginx
+```
+systemctl restart nginx
+```
