@@ -349,3 +349,128 @@ http {
 ```
 systemctl restart nginx
 ```
+
+## Alert Manager
+- Dowload alert manager package from prometheus downloads
+```
+curl -LO https://github.com/prometheus/alertmanager/releases/download/v0.25.0/alertmanager-0.25.0.linux-amd64.tar.gz
+```
+
+- Extract file
+```
+tar -xvzf alertmanager-0.25.0.linux-amd64.tar.gz
+```
+
+- Move the Files: Move the extracted files to the desired installation location
+```
+cp alertmanager /usr/local/bin
+
+cp amtool /usr/local/bin
+```
+
+- Create and configure /etc/systemd/system/prometheus-alert-manager.service file
+```
+[Unit]
+Description=Prometheus Alert Manager
+After=network.target
+
+[Service]
+Type=simple
+User=prometheus
+Group=prometheus
+ExecReload=/bin/kill -HUP $MAINPID
+ExecStart=/bin/bash -c '/usr/local/bin/alertmanager \
+  --config.file=/etc/prometheus/alertmanager.yml \
+  --storage.path=/var/lib/alertmager'
+Restart=always
+
+[Install]
+WantedBy=multi-user.target
+```
+
+- Create and configure the /etc/prometheus/alertsmanager.yaml file
+```
+route:
+  receiver: admin
+
+receivers:
+  - name: admin
+    email_configs:
+      - to: 'devops@gmail.com'
+        from: 'prometheusalertmanager@gmail.com'
+        smarthost: smtp.gmail.com:587
+        auth_username: 'devops@gmail.com'
+        auth_identity: 'devops@gmail.com'
+        auth_password: 'xxxxxxxxxxxxxxxx'
+```
+
+- Set alertmanager service permissions to user
+```
+chown prometheus:prometheus /usr/local/bin/alertmanager
+```
+
+- Start and enable alertmanager
+```
+systemctl start prometheus-alert-manager
+
+systemctl enable prometheus-alert-manager
+```
+
+alermanager should be enabled on localhost port 9093
+
+- Configure prometheus.yaml to use alertmanager
+```
+rule_files:
+  - "rules/alerts.yaml"
+
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets:
+            - localhost:9093
+```
+
+### Sample alerts.yaml with Node Exporter alerts
+```
+groups:
+  - name: prometheus:node_exporter
+    rules:
+      # rules
+      - record: job:node_cpu_seconds:avg_usage_percentage
+        expr: 100 - (avg by(instance) (irate(node_cpu_seconds_total{mode="idle"}[5m])) * 100)
+      - record: job:node_cpu_seconds:usage_by_mode
+        expr: sum by (mode) (irate(node_cpu_seconds_total[5m])) * 100
+      - record: job:node_memory:avg_usage_percentage
+        expr: (node_memory_MemTotal_bytes - node_memory_MemAvailable_bytes) / node_memory_MemTotal_bytes * 100
+      - record: job:node_filesystem:disk_usage_percentage
+        expr: 100 - (node_filesystem_avail_bytes{mountpoint="/"} * 100 / node_filesystem_size_bytes{mountpoint="/"})
+      - record: job:node_network:traffic_in_mb_per_sec
+        expr: (irate(node_network_receive_bytes_total[5m]) + irate(node_network_transmit_bytes_total[5m]))/1024/1024
+      # alerts  
+      - alert: prometheus:node_exporter:down
+        expr: up{job="prometheus.devops.org:node-exporter"} == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "prometheus.devops.org node exporter down"
+      - alert: prometheus:node_exporter:cpu:avg_cpu_percentage
+        expr: job:node_cpu_seconds:avg_usage_percentage > 50
+        labels:
+          severity: warning
+        annotations:
+          summary: "prometheus.devops.org server cpu usage above threshold"
+          description: "prometheus.devops.org server cpu usage above threshold {{ $value }}"
+      - alert: prometheus:node_exporter:memory:avg_usage_percentage
+        expr: job:node_memory:avg_usage_percentage > 60
+        labels:
+          severity: warning
+        annotations:
+          summary: "prometheus.devops.org server memory usage above threshold"
+          description: "prometheus.devops.org server memory usage above threshold {{ $value }}"
+
+      - alert: prometheus:node_exporter:disk:usage_percentage
+        expr: job:node_filesystem:disk_usage_percentage > 40
+        labels:
+          severity: low
+```
